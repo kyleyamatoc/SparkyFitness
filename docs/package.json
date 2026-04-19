@@ -9,7 +9,6 @@
     "preview": "nuxi preview",
     "clean": "nuxi cleanup",
     "lint": "eslint ."
-    "validate": "pnpm run typecheck && pnpm run lint"
   },
   "devDependencies": {
     "@nuxt-themes/docus": "^1.15.1",
