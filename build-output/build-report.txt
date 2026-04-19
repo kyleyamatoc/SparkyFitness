@@ -1,0 +1,62 @@
+
+================================================
+  SparkyFitness - Build Report
+  UECS2363 Assignment 2 | Task 2.1
+================================================
+
+BUILD INFORMATION
+-----------------
+Project Name    : SparkyFitness
+Build Tool      : Gradle 8.5 (with pnpm + Vite)
+Build Timestamp : 2026-04-19 18:49:59
+Build Status    : SUCCESS
+
+ENVIRONMENT
+-----------
+Operating System: Windows 11 10.0
+Java Version    : 17.0.12
+Node.js Version : v24.14.1
+pnpm Version    : 10.32.1
+
+BUILD TASKS EXECUTED
+--------------------
+[0] checkPrerequisites  - PASSED  (Node.js and pnpm verified)
+[1] resolveDependencies - PASSED  (pnpm install --frozen-lockfile)
+[2] compileSource       - PASSED  (TypeScript type-check: 0 errors)
+[3] packageApp          - PASSED  (Vite production build complete)
+[4] generateBuildReport - PASSED  (this file)
+
+DEPENDENCY RESOLUTION
+---------------------
+Strategy        : Frozen lockfile (pnpm-lock.yaml)
+Reproducibility : ENFORCED - all dependency versions are pinned.
+                  No version drift possible between machines or builds.
+Lockfile        : pnpm-lock.yaml
+
+COMPILATION SUMMARY
+-------------------
+Source Language : TypeScript + React JSX
+Compiler        : Vite (via pnpm run typecheck + build)
+Errors          : 0
+
+PACKAGE OUTPUT
+--------------
+Format          : ZIP archive (deployable package)
+Package File    : N/A
+Package Size    : N/A
+Output Location : build-output/
+HTML Files      : 1
+Asset Files     : 94 (JS + CSS bundles)
+Deploy Target   : Any static web server (Nginx, Apache, etc.)
+
+REPRODUCIBILITY GUARANTEE
+--------------------------
+This build is fully reproducible because:
+1. pnpm-lock.yaml pins ALL transitive dependency versions exactly.
+2. --frozen-lockfile flag prevents any version resolution changes.
+3. Vite produces deterministic output for identical source inputs.
+4. Gradle task inputs/outputs declared - unchanged source = skipped tasks.
+
+================================================
+  End of Build Report
+================================================

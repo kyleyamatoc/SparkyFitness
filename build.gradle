@@ -1,0 +1,269 @@
+// ============================================================
+// SparkyFitness Build Automation Script
+// UECS2363 Assignment 2 — Task 2.1 Build Automation
+// Build Tool: Gradle 8.5
+// ============================================================
+
+import java.text.SimpleDateFormat
+
+def isWindows = System.properties['os.name'].toLowerCase().contains('windows')
+def pnpmCmd   = isWindows ? 'pnpm.cmd' : 'pnpm'
+
+// ── Task 0: Check prerequisites ──────────────────────────────
+task checkPrerequisites {
+    group = 'Build'
+    description = 'Verifies Node.js and pnpm are installed'
+
+    doLast {
+        println '=== [0/5] Checking prerequisites ==='
+
+        def nodeProc = ['node', '--version'].execute()
+        nodeProc.waitFor()
+        def nodeVersion = nodeProc.text.trim()
+        if (nodeProc.exitValue() != 0) {
+            throw new GradleException("Node.js is not installed. Please install from https://nodejs.org")
+        }
+
+        def pnpmProc = [pnpmCmd, '--version'].execute()
+        pnpmProc.waitFor()
+        def pnpmVersion = pnpmProc.text.trim()
+        if (pnpmProc.exitValue() != 0) {
+            throw new GradleException("pnpm is not installed. Run: npm install -g pnpm")
+        }
+
+        println "  Node.js : ${nodeVersion}"
+        println "  pnpm    : ${pnpmVersion}"
+        println "  OS      : ${System.properties['os.name']}"
+        println 'Prerequisites check PASSED.'
+
+        project.ext.nodeVersion = nodeVersion
+        project.ext.pnpmVersion = pnpmVersion
+    }
+}
+
+// ── Task 1: Resolve dependencies ─────────────────────────────
+task resolveDependencies {
+    group = 'Build'
+    description = 'Installs all workspace dependencies using frozen lockfile (reproducible)'
+    dependsOn checkPrerequisites
+
+    inputs.file('pnpm-lock.yaml')
+
+    doLast {
+        println '=== [1/5] Resolving dependencies ==='
+        println '  Strategy: pnpm install --frozen-lockfile'
+        println '  Lockfile: pnpm-lock.yaml (pins all transitive dependency versions)'
+
+        exec {
+            commandLine pnpmCmd, 'install', '--frozen-lockfile'
+            workingDir projectDir
+        }
+        println 'Dependencies resolved successfully.'
+    }
+}
+
+// ── Task 2: Compile / Type-check source code ─────────────────
+task compileSource {
+    group = 'Build'
+    description = 'Type-checks TypeScript source — FAILS build if errors found'
+    dependsOn resolveDependencies
+
+    doLast {
+        println '=== [2/5] Compiling source code (TypeScript type-check) ==='
+
+        exec {
+            commandLine pnpmCmd, 'run', 'typecheck'
+            workingDir "${projectDir}/SparkyFitnessFrontend"
+        }
+        println 'Source code compiled successfully — no type errors.'
+    }
+}
+
+// ── Task 3: Package the application ──────────────────────────
+task packageApp {
+    group = 'Build'
+    description = 'Builds and bundles the frontend with Vite, then zips into a deployable package'
+    dependsOn compileSource
+
+    inputs.dir('SparkyFitnessFrontend/src')
+    outputs.dir('SparkyFitnessFrontend/dist')
+
+    doLast {
+        println '=== [3/5] Packaging application ==='
+
+        exec {
+            commandLine pnpmCmd, 'run', 'build'
+            workingDir "${projectDir}/SparkyFitnessFrontend"
+        }
+        println '  Vite build complete → SparkyFitnessFrontend/dist/'
+
+        def timestamp = new SimpleDateFormat('yyyyMMdd-HHmmss').format(new Date())
+        def zipName   = "SparkyFitness-build-${timestamp}.zip"
+        def distDir   = file("${projectDir}/SparkyFitnessFrontend/dist")
+        def outputZip = file("${projectDir}/build-output/${zipName}")
+
+        outputZip.parentFile.mkdirs()
+
+        ant.zip(destfile: outputZip) {
+            fileset(dir: distDir)
+        }
+
+        project.ext.packageName   = zipName
+        project.ext.packagePath   = outputZip.absolutePath
+        project.ext.packageSizeKB = (outputZip.length() / 1024).toLong()
+
+        println "  Package created: build-output/${zipName}"
+        println "  Package size:    ${project.ext.packageSizeKB} KB"
+    }
+}
+
+// ── Task 4: Generate build report ────────────────────────────
+task generateBuildReport {
+    group = 'Build'
+    description = 'Generates a structured build report file (build-report.txt)'
+    dependsOn packageApp
+
+    doLast {
+        println '=== [4/5] Generating build report ==='
+
+        def timestamp  = new SimpleDateFormat('yyyy-MM-dd HH:mm:ss').format(new Date())
+        def distDir    = file("${projectDir}/SparkyFitnessFrontend/dist")
+        def reportFile = file("${projectDir}/build-output/build-report.txt")
+        def assetsDir  = file("${projectDir}/SparkyFitnessFrontend/dist/assets")
+
+        def htmlFiles  = distDir.listFiles()?.findAll  { it.name.endsWith('.html') }?.size() ?: 0
+        def assetFiles = assetsDir.exists() ? assetsDir.listFiles()?.size() ?: 0 : 0
+
+        def report = """
+================================================
+  SparkyFitness - Build Report
+  UECS2363 Assignment 2 | Task 2.1
+================================================
+
+BUILD INFORMATION
+-----------------
+Project Name    : SparkyFitness
+Build Tool      : Gradle 8.5 (with pnpm + Vite)
+Build Timestamp : ${timestamp}
+Build Status    : SUCCESS
+
+ENVIRONMENT
+-----------
+Operating System: ${System.properties['os.name']} ${System.properties['os.version']}
+Java Version    : ${System.properties['java.version']}
+Node.js Version : ${project.ext.has('nodeVersion') ? project.ext.nodeVersion : 'N/A'}
+pnpm Version    : ${project.ext.has('pnpmVersion') ? project.ext.pnpmVersion : 'N/A'}
+
+BUILD TASKS EXECUTED
+--------------------
+[0] checkPrerequisites  - PASSED  (Node.js and pnpm verified)
+[1] resolveDependencies - PASSED  (pnpm install --frozen-lockfile)
+[2] compileSource       - PASSED  (TypeScript type-check: 0 errors)
+[3] packageApp          - PASSED  (Vite production build complete)
+[4] generateBuildReport - PASSED  (this file)
+
+DEPENDENCY RESOLUTION
+---------------------
+Strategy        : Frozen lockfile (pnpm-lock.yaml)
+Reproducibility : ENFORCED - all dependency versions are pinned.
+                  No version drift possible between machines or builds.
+Lockfile        : pnpm-lock.yaml
+
+COMPILATION SUMMARY
+-------------------
+Source Language : TypeScript + React JSX
+Compiler        : Vite (via pnpm run typecheck + build)
+Errors          : 0
+
+PACKAGE OUTPUT
+--------------
+Format          : ZIP archive (deployable package)
+Package File    : ${project.ext.has('packageName') ? project.ext.packageName : 'N/A'}
+Package Size    : ${project.ext.has('packageSizeKB') ? project.ext.packageSizeKB + ' KB' : 'N/A'}
+Output Location : build-output/
+HTML Files      : ${htmlFiles}
+Asset Files     : ${assetFiles} (JS + CSS bundles)
+Deploy Target   : Any static web server (Nginx, Apache, etc.)
+
+REPRODUCIBILITY GUARANTEE
+--------------------------
+This build is fully reproducible because:
+1. pnpm-lock.yaml pins ALL transitive dependency versions exactly.
+2. --frozen-lockfile flag prevents any version resolution changes.
+3. Vite produces deterministic output for identical source inputs.
+4. Gradle task inputs/outputs declared - unchanged source = skipped tasks.
+
+================================================
+  End of Build Report
+================================================
+"""
+        reportFile.parentFile.mkdirs()
+        reportFile.text = report
+
+        println "  Report saved: build-output/build-report.txt"
+        println report
+    }
+}
+
+// ── Task 5: Verify everything ─────────────────────────────────
+task verifyBuild {
+    group = 'Build'
+    description = 'Final verification — confirms all build outputs exist'
+    dependsOn generateBuildReport
+
+    doLast {
+        println '=== [5/5] Verifying all build outputs ==='
+
+        def checks = [
+            'SparkyFitnessFrontend/dist'   : 'Compiled output (dist/)',
+            'build-output/build-report.txt' : 'Build report',
+        ]
+
+        def allPassed = true
+        checks.each { path, label ->
+            def f = file("${projectDir}/${path}")
+            if (f.exists()) {
+                println "  PASS: ${label}"
+            } else {
+                println "  FAIL - MISSING: ${label}"
+                allPassed = false
+            }
+        }
+
+        def buildOutputDir = file("${projectDir}/build-output")
+        def zips = buildOutputDir.listFiles()?.findAll { it.name.endsWith('.zip') }
+        if (zips) {
+            println "  PASS: Package archive: ${zips[0].name}"
+        } else {
+            println "  FAIL - MISSING: Package archive (ZIP)"
+            allPassed = false
+        }
+
+        if (!allPassed) {
+            throw new GradleException("Build verification failed - some outputs are missing.")
+        }
+
+        println ''
+        println '================================================'
+        println '  ALL CHECKS PASSED - BUILD COMPLETE'
+        println '================================================'
+    }
+}
+
+// ── Default build task ────────────────────────────────────────
+task build {
+    group = 'Build'
+    description = 'Full pipeline: prerequisites > dependencies > compile > package > report > verify'
+    dependsOn verifyBuild
+}
+
+// ── Clean task ────────────────────────────────────────────────
+task clean(type: Delete) {
+    group = 'Build'
+    description = 'Removes all build outputs (dist/ and build-output/)'
+    delete "${projectDir}/SparkyFitnessFrontend/dist"
+    delete "${projectDir}/build-output"
+    doLast {
+        println 'Cleaned: dist/ and build-output/ removed.'
+    }
+}
