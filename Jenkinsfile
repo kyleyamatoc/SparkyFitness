@@ -1,35 +1,51 @@
 pipeline {
     agent any
+
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'master', url: 'https://github.com/kurtlai1/hello-world-java1'
+                // Use the Jenkins job's SCM configuration (recommended). If you prefer explicit checkout,
+                // replace this with a git(...) step pointing at your repo.
+                checkout scm
             }
         }
-        stage('Build') {
-            steps { bat 'gradlew clean build'}
-        }
-        stage('Test') {
-            steps { bat 'gradlew test'}
-        }
-        stage('Deploy') {
-            steps { powershell 'java -jar build/libs/hello-world-java-V1.0.jar'}           
-        }    
-}
 
-post {
+        stage('Install') {
+            steps {
+                // Repo is a pnpm workspace (see pnpm-workspace.yaml)
+                // Use corepack so pnpm is available on the agent.
+                bat 'corepack enable'
+                bat 'pnpm -v'
+                bat 'pnpm install --frozen-lockfile'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                // Build all workspace packages (frontend, SparkyFitnessFrontend, shared,
+                // SparkyFitnessMobile, SparkyFitnessServer, docs)
+                bat 'pnpm -r build'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                // Run tests across the workspace (if packages define a test script)
+                bat 'pnpm -r test'
+            }
+        }
+    }
+
+    post {
         always {
             echo 'Cleaning up workspace'
             deleteDir() // Clean up the workspace after the build
         }
         success {
             echo 'Build succeeded!!!'
-            // You could add notification steps here
         }
         failure {
             echo 'Build failed!'
-            // You could add notification steps here
         }
     }
-    
 }
